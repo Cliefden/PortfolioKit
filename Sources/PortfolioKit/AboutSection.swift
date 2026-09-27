@@ -4,6 +4,9 @@ import SwiftUI
 /// composed from ``InfoRow`` and ``LegalLinkRow``. Replaces the near-identical
 /// About sections copy-pasted across the portfolio. Backend-free.
 ///
+/// The built-in labels ("About", "Version", "Support", "Privacy Policy",
+/// "Terms of Use") are localized from PortfolioKit's own string catalog.
+///
 /// ```swift
 /// AboutSection(
 ///     legal: LegalLinks(
@@ -13,17 +16,17 @@ import SwiftUI
 /// )
 /// ```
 public struct AboutSection: View {
-    private let title: String
+    private let title: LocalizedStringResource
     private let bundle: Bundle
     private let legal: LegalLinks
     /// Optional trailing credit/attribution line (e.g. data source).
-    private let credit: String?
+    private let credit: LocalizedStringResource?
 
     public init(
-        title: String = "About",
+        title: LocalizedStringResource = .portfolioKit("About"),
         bundle: Bundle = .main,
         legal: LegalLinks,
-        credit: String? = nil
+        credit: LocalizedStringResource? = nil
     ) {
         self.title = title
         self.bundle = bundle
@@ -33,12 +36,12 @@ public struct AboutSection: View {
 
     public var body: some View {
         SettingsSection(title) {
-            InfoRow("Version", bundle.versionAndBuild)
+            InfoRow(.portfolioKit("Version"), bundle.versionAndBuild)
             if let support = legal.support {
-                LegalLinkRow("Support", url: support)
+                LegalLinkRow(.portfolioKit("Support"), url: support)
             }
-            LegalLinkRow("Privacy Policy", url: legal.privacyPolicy)
-            LegalLinkRow("Terms of Use", url: legal.termsOfUse)
+            LegalLinkRow(.portfolioKit("Privacy Policy"), url: legal.privacyPolicy)
+            LegalLinkRow(.portfolioKit("Terms of Use"), url: legal.termsOfUse)
             if let credit {
                 Text(credit)
                     .font(.footnote)

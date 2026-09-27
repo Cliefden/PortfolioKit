@@ -18,9 +18,9 @@ public enum ColorSchemePreference: String, CaseIterable, Sendable, Identifiable 
 
     public var label: LocalizedStringResource {
         switch self {
-        case .system: return "System"
-        case .light:  return "Light"
-        case .dark:   return "Dark"
+        case .system: return .portfolioKit("System")
+        case .light:  return .portfolioKit("Light")
+        case .dark:   return .portfolioKit("Dark")
         }
     }
 }
@@ -77,21 +77,28 @@ public final class PortfolioSettings {
 
 /// A segmented appearance picker bound to a ``ColorSchemePreference``.
 /// Drop it in a settings screen and feed the value to `.preferredColorScheme`.
+/// (watchOS has no segmented style, so it falls back to the platform default.)
 public struct AppearancePicker: View {
     @Binding private var selection: ColorSchemePreference
     private let title: LocalizedStringResource
 
-    public init(_ title: LocalizedStringResource = "Appearance", selection: Binding<ColorSchemePreference>) {
+    public init(_ title: LocalizedStringResource = .portfolioKit("Appearance"), selection: Binding<ColorSchemePreference>) {
         self.title = title
         self._selection = selection
     }
 
     public var body: some View {
-        Picker(String(localized: title), selection: $selection) {
+        let picker = Picker(selection: $selection) {
             ForEach(ColorSchemePreference.allCases) { pref in
                 Text(pref.label).tag(pref)
             }
+        } label: {
+            Text(title)
         }
-        .pickerStyle(.segmented)
+        #if os(watchOS)
+        return picker // SegmentedPickerStyle is unavailable on watchOS
+        #else
+        return picker.pickerStyle(.segmented)
+        #endif
     }
 }

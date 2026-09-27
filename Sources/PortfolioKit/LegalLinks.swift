@@ -27,11 +27,24 @@ public struct LegalLinkRow: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.portfolioSettingsTheme) private var theme
 
-    private let title: String
+    private let title: Text
     private let value: String?
     private let url: URL
 
-    public init(_ title: String, value: String? = nil, url: URL) {
+    /// - Parameters:
+    ///   - title: localized from the app's string catalog when a literal is passed.
+    ///   - value: optional trailing value, shown verbatim (e.g. a domain).
+    public init(_ title: LocalizedStringResource, value: String? = nil, url: URL) {
+        self.init(title: Text(title), value: value, url: url)
+    }
+
+    /// Verbatim variant for runtime strings.
+    @_disfavoredOverload
+    public init<S: StringProtocol>(_ title: S, value: String? = nil, url: URL) {
+        self.init(title: Text(verbatim: String(title)), value: value, url: url)
+    }
+
+    init(title: Text, value: String?, url: URL) {
         self.title = title
         self.value = value
         self.url = url
@@ -42,17 +55,19 @@ public struct LegalLinkRow: View {
             openURL(url)
         } label: {
             HStack {
-                Text(title).foregroundStyle(theme.label)
+                title.foregroundStyle(theme.label)
                 Spacer()
                 if let value {
-                    Text(value).foregroundStyle(theme.value)
+                    Text(verbatim: value).foregroundStyle(theme.value)
                 }
                 Image(systemName: "arrow.up.right")
                     .font(.caption)
                     .foregroundStyle(theme.label)
+                    .accessibilityHidden(true)
             }
             .settingsRowSurface(theme)
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(.isLink)
     }
 }

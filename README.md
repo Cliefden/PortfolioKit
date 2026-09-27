@@ -3,12 +3,17 @@
 Shared, **backend-free** SwiftUI components + small helpers for the Apps-AppStore
 family. Pure SwiftUI/Foundation, no external dependencies, no networking — the app
 always supplies the side-effecting work (deletion, subscription management) via
-closures. Part of the portfolio standard (`_standard/PORTFOLIO_STANDARD.md` §3/§5);
-patterns are distilled in `SETTINGS_BEST_PRACTICES.md`.
+closures. Part of the portfolio standard (`Celiador/_standard/PORTFOLIO_STANDARD.md`
+§3/§5 in the Apps-AppStore workspace); settings-screen patterns are distilled in
+`SETTINGS_BEST_PRACTICES.md` at the Apps-AppStore workspace root. Neither file is
+part of this repo — the essentials are repeated below.
 
 > **Layout note.** These components draw their own rounded, stroked surfaces and
 > are designed for a `ScrollView { VStack { … } }` settings screen (Contrarian
 > style), **not** inside a `Form`/`List` (where the surfaces would double-inset).
+> Apps with a native `Form`/`List` settings screen keep their own rows and adopt
+> only the list-agnostic pieces (`Bundle.versionAndBuild`, `LegalLinks`,
+> `PortfolioSettings`, `DeleteAccountView` as a pushed screen).
 
 ## What's in it
 
@@ -27,9 +32,12 @@ Higher-level, ready-to-drop pieces:
 - **`SubscriptionStatusCard(...)`** — **source-aware** subscription block. Renders
   Upgrade when inactive, and the *compliant* Manage affordance when active
   (`.storeKit` → native manage sheet, `.web` → billing portal, `.complimentary` →
-  no action), plus an optional Restore. Distilled from Contrarian + Nassau.
+  no action), plus an optional Restore (hidden automatically for active `.web` /
+  `.complimentary` access, where StoreKit restore doesn't apply). Distilled from
+  Contrarian + Nassau.
 - **`DeleteAccountView(config:onDelete:)`** — the gold-standard destructive flow
-  (App Store guideline 5.1.1(v)): typed confirmation phrase, countdown gate,
+  (App Store guideline 5.1.1(v)): typed confirmation phrase, countdown gate that
+  starts once the phrase matches,
   App Store-subscription warning, final confirmation dialog, then the app-supplied
   async `onDelete`. Distilled from Nassau + Contrarian.
 - **`PortfolioSettings`** — the reference **settings-store pattern**: an
@@ -37,7 +45,19 @@ Higher-level, ready-to-drop pieces:
   injected through `@Environment` (from Lunker's `UnitSettings`). Ships
   `appearance` + `hapticsEnabled` — use directly or copy for app-specific stores.
 - **`AppearancePicker`** + **`ColorSchemePreference`** — segmented light/dark/system
-  picker feeding `.preferredColorScheme`.
+  picker feeding `.preferredColorScheme` (platform-default style on watchOS).
+
+## Localization
+
+PortfolioKit ships its own `Resources/Localizable.xcstrings` (en source; sv, de,
+fr, es marked *needs review*) resolved via `Bundle.module`, so built-in copy
+("Version", "Privacy Policy", "Restore Purchases", the delete-account flow, …)
+is translated without the app carrying those keys.
+
+Text **you** pass follows SwiftUI's `Text` rule: a string **literal** becomes a
+`LocalizedStringResource` looked up in your app's string catalog; a `String`
+**variable** is shown verbatim. `InfoRow`/`LegalLinkRow` values, `planName` and
+`DeleteAccountConfig.confirmationPhrase` are always verbatim.
 
 ## Use
 
@@ -116,13 +136,27 @@ Wire the settings store at the app entry point:
 ## Versioning
 
 Tagged releases; apps depend on it by URL + version (CI-safe — resolvable in Xcode
-Cloud, unlike a sibling local path). Use `Add Local…` only for local development.
+Cloud, unlike a sibling local path). Use `Add Local…` only for local development,
+never in a committed project.
+
+**Unreleased (next: 0.2.0)** — watchOS + visionOS now compile; localization via
+the package string catalog; delete countdown starts when the phrase matches;
+warning haptic no longer fires on dismiss; Restore hidden for web/complimentary;
+locale-aware section headers. Source-breaking for a few call sites:
+`DeleteAccountConfig` copy fields are `LocalizedStringResource`
+(`deletedItems: [LocalizedStringResource]`), `AboutSection(title:credit:)` take
+`LocalizedStringResource`, and `DeleteAccountView`'s `onDelete` is `@MainActor`.
+Existing `SettingsSection`/`InfoRow`/`StatusCard`/`LegalLinkRow` calls compile
+unchanged.
 
 ## Build / test
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift build
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test
+# every declared platform must compile, e.g. watchOS:
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
+  xcodebuild -scheme PortfolioKit -destination 'generic/platform=watchOS' build
 ```
 
 (The plain Command Line Tools can't link the SPM manifest; point at a full Xcode.)

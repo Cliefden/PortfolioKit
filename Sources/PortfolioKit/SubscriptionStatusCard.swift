@@ -33,13 +33,79 @@ public struct SubscriptionState: Sendable, Hashable {
     public static let inactive = SubscriptionState(isActive: false)
 }
 
+/// Pure state → presentation mapping for ``SubscriptionStatusCard`` — the
+/// compliance-relevant decisions (which action, whether Restore makes sense),
+/// kept separate from the view so they can be unit-tested.
+struct SubscriptionPresentation {
+    enum Action: Equatable {
+        /// Inactive → present the paywall.
+        case upgrade
+        /// Active StoreKit sub → native `.manageSubscriptionsSheet`.
+        case manageInApp
+        /// Active web/Stripe sub → billing portal.
+        case manageOnWeb
+    }
+
+    let state: SubscriptionState
+    let planName: String
+
+    var title: LocalizedStringResource {
+        state.isActive
+            ? .portfolioKit("\(planName) active", comment: "Subscription card title; %@ is the plan name, e.g. Plus")
+            : .portfolioKit("\(planName)", comment: "Subscription card title when inactive; the plan name")
+    }
+
+    var detail: LocalizedStringResource {
+        guard state.isActive else {
+            return .portfolioKit("Unlock everything with \(planName).", comment: "%@ is the plan name")
+        }
+        if let renewalDescription = state.renewalDescription {
+            return .portfolioKit("\(renewalDescription)", comment: "App-supplied renewal text, shown as is")
+        }
+        switch state.source {
+        case .storeKit, .web: return .portfolioKit("Your subscription is active.")
+        case .complimentary: return .portfolioKit("Complimentary access.")
+        }
+    }
+
+    var icon: String { state.isActive ? "checkmark.seal.fill" : "sparkles" }
+
+    /// The primary action, or `nil` when none applies (complimentary access is
+    /// managed by the grantor, not the user).
+    var action: Action? {
+        guard state.isActive else { return .upgrade }
+        switch state.source {
+        case .storeKit: return .manageInApp
+        case .web: return .manageOnWeb
+        case .complimentary: return nil
+        }
+    }
+
+    var actionLabel: LocalizedStringResource? {
+        switch action {
+        case .upgrade: return .portfolioKit("Upgrade to \(planName)", comment: "%@ is the plan name")
+        case .manageInApp: return .portfolioKit("Manage Subscription")
+        case .manageOnWeb: return .portfolioKit("Manage on the web")
+        case nil: return nil
+        }
+    }
+
+    /// StoreKit "Restore Purchases" only makes sense when there is nothing
+    /// active, or when the active entitlement came from StoreKit. For web or
+    /// complimentary access it is meaningless and confusing, so it is hidden.
+    var showsRestore: Bool {
+        !state.isActive || state.source == .storeKit
+    }
+}
+
 /// A subscription status block: a tinted `StatusCard` plus the *compliant* action
 /// for the current state — Upgrade when inactive, source-appropriate Manage when
-/// active, and an always-available Restore. The app supplies the closures; this
-/// view only decides which affordance is correct for the state/source.
+/// active, and Restore (hidden for active web/complimentary access, where StoreKit
+/// restore doesn't apply). The app supplies the closures; this view only decides
+/// which affordance is correct for the state/source. `planName` is a brand name
+/// and is not translated; the surrounding copy is localized by PortfolioKit.
 public struct SubscriptionStatusCard: View {
-    private let state: SubscriptionState
-    private let planName: String
+    private let presentation: SubscriptionPresentation
     private let onUpgrade: () -> Void
     private let onManage: () -> Void
     private let onRestore: (() -> Void)?
@@ -52,7 +118,8 @@ public struct SubscriptionStatusCard: View {
     ///   - onUpgrade: present the paywall (shown when inactive).
     ///   - onManage: manage the active sub. For `.storeKit` wire the native
     ///     `.manageSubscriptionsSheet`; for `.web` open the billing portal.
-    ///   - onRestore: restore purchases. Pass `nil` to hide the row.
+    ///   - onRestore: restore purchases. Pass `nil` to hide the row. Also hidden
+    ///     automatically for active `.web` / `.complimentary` access.
     public init(
         state: SubscriptionState,
         planName: String,
@@ -61,8 +128,7 @@ public struct SubscriptionStatusCard: View {
         onManage: @escaping () -> Void = {},
         onRestore: (() -> Void)? = nil
     ) {
-        self.state = state
-        self.planName = planName
+        self.presentation = SubscriptionPresentation(state: state, planName: planName)
         self.isRestoring = isRestoring
         self.onUpgrade = onUpgrade
         self.onManage = onManage
@@ -71,18 +137,23 @@ public struct SubscriptionStatusCard: View {
 
     public var body: some View {
         VStack(spacing: 12) {
-            StatusCard(title: cardTitle, detail: cardDetail, icon: cardIcon, tint: cardTint)
-            if let actionLabel {
+            StatusCard(
+                title: Text(presentation.title),
+                detail: Text(presentation.detail),
+                icon: presentation.icon,
+                tint: presentation.state.isActive ? .green : .accentColor
+            )
+            if let actionLabel = presentation.actionLabel {
                 Button(action: primaryAction) {
                     Text(actionLabel).frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
             }
-            if let onRestore {
+            if let onRestore, presentation.showsRestore {
                 Button(action: onRestore) {
                     HStack(spacing: 6) {
                         if isRestoring { ProgressView() }
-                        Text("Restore Purchases")
+                        Text(LocalizedStringResource.portfolioKit("Restore Purchases"))
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -92,39 +163,7 @@ public struct SubscriptionStatusCard: View {
         }
     }
 
-    // MARK: - State → presentation
-
-    private var cardTitle: String {
-        state.isActive ? "\(planName) active" : "\(planName)"
-    }
-
-    private var cardDetail: String {
-        guard state.isActive else { return "Unlock everything with \(planName)." }
-        if let renewalDescription = state.renewalDescription { return renewalDescription }
-        switch state.source {
-        case .storeKit, .web: return "Your subscription is active."
-        case .complimentary: return "Complimentary access."
-        }
-    }
-
-    private var cardIcon: String {
-        state.isActive ? "checkmark.seal.fill" : "sparkles"
-    }
-
-    private var cardTint: Color { state.isActive ? .green : .accentColor }
-
-    /// The primary button label, or `nil` when no action applies
-    /// (complimentary access is managed by the grantor, not the user).
-    private var actionLabel: String? {
-        if !state.isActive { return "Upgrade to \(planName)" }
-        switch state.source {
-        case .storeKit: return "Manage Subscription"
-        case .web:      return "Manage on the web"
-        case .complimentary: return nil
-        }
-    }
-
     private func primaryAction() {
-        state.isActive ? onManage() : onUpgrade()
+        presentation.action == .upgrade ? onUpgrade() : onManage()
     }
 }
