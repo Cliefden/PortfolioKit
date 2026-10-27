@@ -501,7 +501,7 @@ Tagged releases; apps depend on it by URL + version (CI-safe — resolvable in X
 Cloud, unlike a sibling local path). Use `Add Local…` only for local development,
 never in a committed project.
 
-**0.3.0 (unreleased)** — new **`PortfolioCore`** product (`Keychain`,
+**0.3.0 (2026-10-27)** — new **`PortfolioCore`** product (`Keychain`,
 `AppGroupStore`, `ReviewPromptPolicy`, `ReminderScheduler`, `WatchLink`,
 `NetworkMonitor`, `ImageDownscaler` + `ThumbnailCache`, `CSVWriter`,
 `PortfolioDateFormat`, `AnyEncodable`, `LaunchFlags`, `SwiftDataRecovery`), and
