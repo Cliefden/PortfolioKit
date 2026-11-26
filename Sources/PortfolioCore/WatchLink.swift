@@ -9,6 +9,11 @@ private struct PlistBox: @unchecked Sendable {
     let value: [String: Any]
 }
 
+/// Carries a WatchConnectivity error (an `NSError` in practice) to the main actor.
+private struct ErrorBox: @unchecked Sendable {
+    let error: any Error
+}
+
 /// The shared WatchConnectivity bridge for iPhone ↔ Apple Watch, distilled from
 /// Sextant `WatchLink`, Lunker `WatchSync` and Equinox `WatchSync`.
 ///
@@ -66,6 +71,21 @@ public final class WatchLink: NSObject {
         didSet { flushInbox() }
     }
 
+    /// Called each time an activation attempt finishes, successful or not —
+    /// *after* the counterpart's stored context (if any) went to `onContext`.
+    /// `.activated` means success. Use it to stop waiting for the first context
+    /// or to complete a watchOS `WKWatchConnectivityRefreshBackgroundTask`.
+    @ObservationIgnored public var onActivationComplete: ((WCSessionActivationState) -> Void)?
+
+    /// Called with WatchConnectivity failures, for error reporting. `operation`
+    /// is `"activate"`, `"updateContext"` or `"sendMessage"`. (`lastError` keeps
+    /// the description too.)
+    @ObservationIgnored public var onError: ((_ operation: String, _ error: any Error) -> Void)?
+
+    /// An `activate()` call is waiting for its delegate callback; further calls
+    /// don't re-activate the session meanwhile.
+    @ObservationIgnored private var activationInFlight = false
+
     @ObservationIgnored private var inbox: [[String: Any]] = []
     @ObservationIgnored private var outbox: [(message: [String: Any], reliable: Bool)] = []
     @ObservationIgnored private var pendingContext: [String: Any]?
@@ -79,10 +99,14 @@ public final class WatchLink: NSObject {
         WCSession.isSupported() ? WCSession.default : nil
     }
 
-    /// Activate the session. Idempotent — call it at launch on both sides.
+    /// Activate the session. Idempotent — call it at launch on both sides. A
+    /// call while an activation is already in flight does nothing; after a
+    /// failed activation the next call retries.
     public func activate() {
         guard let session else { return }
         if session.delegate === self, session.activationState == .activated { return }
+        guard !activationInFlight else { return }
+        activationInFlight = true
         session.delegate = self
         session.activate()
     }
@@ -117,6 +141,7 @@ public final class WatchLink: NSObject {
             pendingContext = nil
         } catch {
             lastError = error.localizedDescription
+            onError?("updateContext", error)
         }
     }
 
@@ -141,9 +166,10 @@ public final class WatchLink: NSObject {
         if session.isReachable {
             let box = PlistBox(value: message)
             session.sendMessage(message, replyHandler: nil) { [weak self] error in
-                let description = error.localizedDescription
+                let failure = ErrorBox(error: error)
                 Task { @MainActor in
-                    self?.lastError = description
+                    self?.lastError = failure.error.localizedDescription
+                    self?.onError?("sendMessage", failure.error)
                     if reliable { WCSession.default.transferUserInfo(box.value) }
                 }
             }
@@ -178,14 +204,22 @@ public final class WatchLink: NSObject {
         queued.forEach(onMessage)
     }
 
-    fileprivate func didActivate(state: WCSessionActivationState, reachable: Bool, context: PlistBox, error: String?) {
+    fileprivate func didActivate(state: WCSessionActivationState, reachable: Bool, context: PlistBox, error: ErrorBox?) {
+        activationInFlight = false
         activationState = state
         isReachable = reachable
-        if let error { lastError = error }
-        guard state == .activated else { return }
+        if let error {
+            lastError = error.error.localizedDescription
+            onError?("activate", error.error)
+        }
+        guard state == .activated, error == nil else {
+            onActivationComplete?(state)
+            return
+        }
         receive(context: context.value)
         flushContext()
         flushOutbox()
+        onActivationComplete?(state)
     }
 
     fileprivate func setReachable(_ reachable: Bool) {
@@ -204,6 +238,7 @@ public final class WatchLink: NSObject {
         // to the new one once the session reactivates.
         activationState = .notActivated
         if pendingContext == nil, !lastSentContext.isEmpty { pendingContext = lastSentContext }
+        activationInFlight = true
         WCSession.default.activate()
     }
     #endif
@@ -219,9 +254,9 @@ extension WatchLink: WCSessionDelegate {
     ) {
         let reachable = session.isReachable
         let context = PlistBox(value: session.receivedApplicationContext)
-        let message = error?.localizedDescription
+        let failure = error.map(ErrorBox.init)
         Task { @MainActor in
-            self.didActivate(state: activationState, reachable: reachable, context: context, error: message)
+            self.didActivate(state: activationState, reachable: reachable, context: context, error: failure)
         }
     }
 
