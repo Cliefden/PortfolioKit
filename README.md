@@ -379,7 +379,8 @@ let container = try SwiftDataRecovery.makeContainer(
 ## Localization
 
 PortfolioKit ships its own `Resources/Localizable.xcstrings` (en source; sv, de,
-fr, es marked *needs review*) resolved via `Bundle.module`, so built-in copy
+fr, es, ar, da, it, ja, ko, nb, nl, pl, pt-BR, ru, zh-Hans, all marked *needs
+review*) resolved via `Bundle.module`, so built-in copy
 ("Version", "Privacy Policy", "Restore Purchases", the delete-account flow, the
 paywall period/trial copy and renewal disclosure, "Open Settings", "Continue", …)
 is translated without the app carrying those keys. Period lengths ("%lld days",
@@ -500,6 +501,10 @@ Wire the settings store at the app entry point:
 Tagged releases; apps depend on it by URL + version (CI-safe — resolvable in Xcode
 Cloud, unlike a sibling local path). Use `Add Local…` only for local development,
 never in a committed project.
+
+**0.3.1 (2026-11-26)** — package catalog gains ar, da, it, ja, ko, nb, nl, pl,
+pt-BR, ru and zh-Hans for every built-in string (*needs review*), with full
+plural forms for the period lengths. No API changes.
 
 **0.3.0 (2026-10-27)** — new **`PortfolioCore`** product (`Keychain`,
 `AppGroupStore`, `ReviewPromptPolicy`, `ReminderScheduler`, `WatchLink`,
