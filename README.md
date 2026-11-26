@@ -264,7 +264,14 @@ Nassau and Celiador variants):
 - `send(_:reliable:)` — live `sendMessage` when reachable, otherwise (or on failure)
   `transferUserInfo`; queued in memory before activation. `reliable: false` = live only.
 - `onContext` / `onMessage` — handlers; anything received earlier is replayed.
+- `onActivationComplete` — called after every activation attempt, success or
+  failure, once the stored context went to `onContext` (stop a launch-time wait,
+  complete a watchOS `WKWatchConnectivityRefreshBackgroundTask`). *(0.3.2)*
+- `onError(operation, error)` — `"activate"` / `"updateContext"` /
+  `"sendMessage"` failures, for error reporting. *(0.3.2)*
 - Observable `isReachable`, `activationState`, `lastError`.
+- `activate()` doesn't re-activate while an activation is in flight; a failed
+  activation can be retried. *(0.3.2)*
 
 ```swift
 WatchLink.shared.activate()
@@ -501,6 +508,11 @@ Wire the settings store at the app entry point:
 Tagged releases; apps depend on it by URL + version (CI-safe — resolvable in Xcode
 Cloud, unlike a sibling local path). Use `Add Local…` only for local development,
 never in a committed project.
+
+**0.3.2 (2026-11-26)** — `WatchLink` gains `onActivationComplete` (fires
+after every activation attempt, after the stored context was delivered) and
+`onError(operation, error)`, and `activate()` no longer re-activates a session
+whose activation is still in flight. Additive; needed for Lunker's watch side.
 
 **0.3.1 (2026-11-26)** — package catalog gains ar, da, it, ja, ko, nb, nl, pl,
 pt-BR, ru and zh-Hans for every built-in string (*needs review*), with full
